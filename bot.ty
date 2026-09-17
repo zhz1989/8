@@ -1,0 +1,62 @@
+import os
+import logging
+from telegram import Update
+from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+
+# 开启日志记录
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# 从环境变量中获取 Bot Token
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+if not BOT_TOKEN:
+    raise ValueError("未检测到 BOT_TOKEN 环境变量，请先执行 export BOT_TOKEN='你的Token'")
+
+async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """处理用户发送的视频或文件，生成可供浏览器和播放器直接加载的直链"""
+    message = update.message
+    video = message.video or message.document
+    
+    if not video:
+        await message.reply_text("请发送一个有效的视频文件！")
+        return
+
+    # 获取文件的 Telegram File ID
+    file_id = video.file_id
+    
+    # 通过 Telegram API 获取文件的远端路径
+    file = await context.bot.get_file(file_id)
+    file_path = file.file_path
+    
+    # 拼接官方文件直链（支持主流浏览器的视频标签加载及直链下载）
+    direct_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+    
+    # 回复用户直链与播放提示
+    response_text = (
+        f"🎬 **视频床解析成功！**\n\n"
+        f"🔗 **直链下载/播放地址：**\n`{direct_url}`\n\n"
+        f"💡 **使用提示：**\n"
+        f"• 可直接复制链接到浏览器或支持直链/m3u8的播放器中播放。\n"
+        f"• 该链接由 Telegram 官方服务器强力驱动。"
+    )
+    
+    await message.reply_text(response_text, parse_mode="Markdown")
+
+def main():
+    # 初始化机器人应用
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # 注册消息处理器（捕获视频和文件类型的消息）
+    application.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
+
+    print("🤖 视频床机器人已启动，正在等待接收媒体文件...")
+    
+    # 开始轮询运行
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
